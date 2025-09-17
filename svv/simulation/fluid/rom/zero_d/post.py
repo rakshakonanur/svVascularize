@@ -181,7 +181,7 @@ if write_total and total is not None:
 
 view_plots="""import numpy as np
 import matplotlib.pyplot as plt
-data = np.load("solver_0d_branch_results.npy",allow_pickle=True).item()
+data = np.load("output.csv",allow_pickle=True).item()
 vessels = []
 fig_flow = plt.figure()
 ax_flow = fig_flow.add_subplot()

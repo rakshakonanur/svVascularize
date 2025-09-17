@@ -4,6 +4,7 @@ from copy import deepcopy
 from scipy.interpolate import splprep, splev
 from scipy.spatial import cKDTree
 
+import os
 
 def get_longest_path(data, seed_edge):
     dig = True
@@ -248,7 +249,7 @@ def get_interpolated_sv_data(data):
     return interp_xyz, interp_r, interp_n, path_frames, branches, interp_xyzr
 
 
-def build_centerlines(tree, points_per_unit_length=100):
+def build_centerlines(tree, outdir, points_per_unit_length=5000, distal_pressure=0, resistance_split=(1,0), steady=True):
     """
     Export centerline to a file.
     """
@@ -277,8 +278,8 @@ def build_centerlines(tree, points_per_unit_length=100):
         spline_data_normal = splev(n, spline[0], der=1)
         points = make_points(spline_data[0], spline_data[1], spline_data[2])
         dist = numpy.sum(numpy.linalg.norm(numpy.diff(points, axis=0), axis=1))
-        num_points = 2 + int(dist*points_per_unit_length)
-        num_points = 100
+        # num_points = 2 + int(dist*points_per_unit_length)
+        num_points = 1000  #Raksha- toggle for num points depending on length or constant
         n = numpy.linspace(0, 1, num_points)
         spline_data = splev(n, spline[0])
         spline_r_data = numpy.array(spline_data[3]).flatten()
@@ -338,12 +339,17 @@ def build_centerlines(tree, points_per_unit_length=100):
         polys[poly_idx].point_data['CenterlineId'][0:pt_idx+1, ind] = 1
         current_closest_branch = poly_idx
         while current_closest_branch != 0:
+            # print("current_closest_branch:", current_closest_branch)
+            # print("current branch id:", ind)
+            # print("Bifurcation between branch {} and branch {} at point id {} on branch {}".format(ind, current_closest_branch, current_closest_pt_id, current_closest_branch))
             closest_branch = current_closest_branch
             poly_idx, pt_idx, closest_point, _ = find_closest_excluding(
                 polys[closest_branch].points[0], closest_branch
             )
             current_closest_branch = poly_idx
             polys[poly_idx].point_data['CenterlineId'][0:pt_idx+1, ind] = 1
+
+
 
     # Determine Branch Temp Ids (CORRECT)
     branch_tmp_count = 0
@@ -479,4 +485,45 @@ def build_centerlines(tree, points_per_unit_length=100):
         new_line = [2, closest_pt_id, closest_next_id]
         centerlines_all.lines = numpy.hstack((centerlines_all.lines, numpy.array(new_line)))
 
-    return centerlines_all, polys
+    # Generate Outlet Face File: Raksha Added
+    outlet_file = open(outdir+os.sep+'outlets',"w+")
+    for i in range(len(polys)):
+        outlet_file.write("cap_{}\n".format(i+1))
+    outlet_file.close()
+
+    # Genrate Boundary Condition File (need to create real boundary conditions)
+    total_resistance = (tree.parameters.terminal_pressure - 1333*distal_pressure)/tree.data[0,22]
+    #split = (1,0)
+    rcrt_file = open(outdir+os.sep+"rcrt.dat","w+")
+    rcrt_file.write("2\n")
+    for i in range(len(polys)):
+        inv_area = ((total_outlet_area)/(polys[i].point_data['CenterlineSectionArea'][-1]))
+        rcrt_file.write("2\n")
+        rcrt_file.write("cap_{}\n".format(i+1))
+        rcrt_file.write("{}\n".format(total_resistance*inv_area*resistance_split[0]))
+        rcrt_file.write("0.00002\n")
+        rcrt_file.write("{}\n".format(total_resistance*inv_area*resistance_split[1]))
+        rcrt_file.write("0.0 0.0\n")
+        rcrt_file.write("1.0 0.0\n")
+    rcrt_file.close()
+
+    # Generate Inflow File
+    if steady:
+        flow = [tree.data[0,22], tree.data[0,22]]
+        time = [0, 1]
+        with open(outdir+os.sep+"inflow_1d.flow","w+") as file:
+            for i in range(len(time)):
+                file.write("{}  {}\n".format(time[i],flow[i]))
+        file.close()
+    # else:
+    #     time,flow = wave(self.data[0,22],self.data[0,21]*2) # changed wave function
+    #     time = time.tolist()
+    #     flow = flow.tolist()
+    #     flow[-1] = flow[0]
+    #     period = time[-1]
+    #     with open(outdir+os.sep+"inflow_1d.flow","w") as file:
+    #         for i in range(len(time)):
+    #             file.write("{}  {}\n".format(time[i],flow[i]))
+    #     file.close()
+
+    return centerlines_all,polys

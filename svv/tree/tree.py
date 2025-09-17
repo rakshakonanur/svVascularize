@@ -43,7 +43,7 @@ class Tree(object):
                 self.parameters.set_unit_system(unit_system)
         self.vessel_map = TreeMap()
         #self.c_vessel_map = None
-        self.physical_clearance = 0.0
+        self.physical_clearance = kwargs.pop('physical_clearance', 0.0) # raksha
         self.domain = None
         self.convex = None
         self.random_seed = None
@@ -572,6 +572,7 @@ class Tree(object):
         return model
 
 
+<<<<<<< HEAD
     def export_centerlines(self, points_per_unit_length: int = 100, **kwargs):
         """
         Export centerline geometry for this tree.
@@ -591,13 +592,22 @@ class Tree(object):
             Per-branch polylines used to construct the merged centerline set.
         """
         centerlines, polys = build_centerlines(self, points_per_unit_length=points_per_unit_length)
+=======
+    def export_centerlines(self, outdir=None, **kwargs):
+        centerlines, polys = build_centerlines(self, outdir)
+>>>>>>> f498f6a (new changes)
         return centerlines, polys
 
 
     def export_gcode(self):
         pass
 
+<<<<<<< HEAD
     def export_splines(self, spline_sample_points=100):
         interp_xyz, interp_r, interp_n, path_frames, branches, interp_xyzr = get_interpolated_sv_data(self.data)
         splines = write_splines(interp_xyzr, spline_sample_points=spline_sample_points)
         return splines
+=======
+    def export_centerline(self):
+        pass
+>>>>>>> f498f6a (new changes)

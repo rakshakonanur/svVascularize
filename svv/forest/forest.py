@@ -245,6 +245,7 @@ class Forest(object):
         Add a tree to the forest.
         """
         decay_probability = kwargs.pop('decay_probability', 0.9)
+        threshold = kwargs.pop('threshold', None) # raksha
         self.connections = None
         if len(args) == 0:
             n_vessels = 1
@@ -266,7 +267,7 @@ class Forest(object):
                     success = False
                     while not success:
                         #tmp_new_vessels, tmp_added_vessels, tmp_new_vessel_map, _, _, tmp_nonconvex_count = self.networks[i][j].add(inplace=False)
-                        results = self.networks[i][j].add(inplace=False)
+                        results = self.networks[i][j].add(inplace=False, threshold=threshold) # raksha
                         change_i, change_j, new_tmp_data, old_tmp_data, tmp_new_vessel_map, connectivity, inds, mesh_cell, tmp_added_vessels = results
                         #tmp_new_vessels = numpy.vstack([self.networks[i][j].data, tmp_added_vessels[0], tmp_added_vessels[1]])
                         change_i = numpy.array(change_i, dtype=int)
@@ -359,6 +360,8 @@ class Forest(object):
                     self.networks[i][j]._idx_cache.extend(next_idxs)
                     self.networks[i][j]._col21_cache.extend([21, 21])
 
+        return self.networks
+
     def connect(self, *args, **kwargs):
         self.connections = ForestConnection(self)
         if len(args) == 0:
@@ -377,7 +380,7 @@ class Forest(object):
         """
         if isinstance(outdir, type(None)):
             outdir = '3d_tmp'
-        os.makedirs(outdir, exist_ok=True)
+        merged_model = numpy.empty((self.n_networks, max(self.n_trees_per_network)), dtype=object) # may need to adjus if multiple networks
         for i in range(self.n_networks):
             net_dir = os.path.join(outdir, f"network_{i}")
             os.makedirs(net_dir, exist_ok=True)

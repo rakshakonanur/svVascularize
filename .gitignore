@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -41,3 +42,28 @@ OPENGL_TROUBLESHOOTING.md
 STYLE_COMPARISON.md
 UBUNTU_20.04_SETUP.md
 launch_gui_system_mesa.sh
+=======
+# Python cache
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Compiled extensions
+*.so
+*.dll
+*.dylib
+
+# Cython-generated C/C++ sources
+*.cpp
+*.c
+
+# Egg metadata
+*.egg-info/
+
+# Build / bin folders
+bin/
+svv/bin/
+
+# Test cache
+test/__pycache__/
+>>>>>>> f498f6a (new changes)

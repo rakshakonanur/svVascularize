@@ -37,11 +37,13 @@ class Simulation(object):
         using a synthetic vascular network.
         """
         self.synthetic_object = synthetic_object
-        if name is None:
-            name = "simulations_" + uuid.uuid4().hex
+        # if name is None:
+        #     name = "simulations_"  # + uuid.uuid4().hex raksha
         if directory is None:
             directory = os.getcwd()
-        self.file_path = os.path.join(directory, name)
+        self.file_path = directory
+        # self.file_path = os.path.join(directory, name)
+        os.makedirs(self.file_path, exist_ok=True)
         self.tissue_domain_faces = []
         self.fluid_domain_faces = []
         self.tissue_domain_surface_meshes = []
@@ -779,10 +781,10 @@ class Simulation(object):
             params.seg_size_adaptive = True
             params.model_order = 1  # Since this is strictly a 1d ROM simulation it is not an exposed parameter
             params.uniform_bc = False
-            params.inflow_input_file = self.file_path + os.sep + "fluid" + os.sep + "1d" + "inflow_1d.flow"
+            params.inflow_input_file = self.file_path + os.sep + "inflow_1d.flow"
             params.outflow_bc_type = ["rcrt.dat"]
-            params.outflow_bc_file = self.file_path + os.sep + "fluid" + os.sep + "1d"
-            params.model_name = "1d_model_{}-{}".format(network_id, tree_id)
+            params.outflow_bc_file = self.file_path + os.sep 
+            params.model_name = "1d_model_{}-{}".format(network_id, tree_id) # raksha : adjust here to match old format
             params.compute_mesh = True
             params.time_step = time_step_size
             params.num_time_steps = number_time_steps
@@ -792,6 +794,10 @@ class Simulation(object):
             params.density = density
             mesh = one_d_mesh.Mesh()
             self.fluid_1d_simulations[0] = tuple([centerlines, mesh, params])
+            centerline_data = one_d.generate_1d_mesh.read_centerlines(params)
+            mesh.generate(params,centerline_data)
+            return self.synthetic_object.data
+            
         else:
             raise ValueError("Index out of range.")
 
