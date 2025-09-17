@@ -35,11 +35,13 @@ class Simulation(object):
         using a synthetic vascular network.
         """
         self.synthetic_object = synthetic_object
-        if name is None:
-            name = "simulations_" + uuid.uuid4().hex
+        # if name is None:
+        #     name = "simulations_"  # + uuid.uuid4().hex raksha
         if directory is None:
             directory = os.getcwd()
-        self.file_path = os.path.join(directory, name)
+        self.file_path = directory
+        # self.file_path = os.path.join(directory, name)
+        os.makedirs(self.file_path, exist_ok=True)
         self.tissue_domain_faces = []
         self.fluid_domain_faces = []
         self.tissue_domain_surface_meshes = []
@@ -624,8 +626,8 @@ class Simulation(object):
         else:
             raise ValueError("Simulation file or mesh object not found.")
 
-    def construct_1d_fluid_simulation(self, *args, viscosity=None, density=None, time_step_size=0.01,
-                                      number_time_steps=100, olufsen_material_exponent=2):
+    def construct_1d_fluid_simulation(self, *args, viscosity=None, density=None, time_step_size=0.01, steady=True,
+                                       number_time_steps=100, olufsen_material_exponent=2, distal_pressure=0, resistance_split=(1,0)):
         if len(args) == 0:
             network_id = 0
             tree_id = 0
@@ -638,29 +640,34 @@ class Simulation(object):
         else:
             raise ValueError("Too many positional input arguments")
         if isinstance(self.synthetic_object, svv.tree.tree.Tree):
-            centerlines, _ = self.synthetic_object.export_centerlines()
+            centerlines, _ = self.synthetic_object.export_centerlines(outdir = self.file_path)
+            centerlines.save(self.file_path + os.sep + 'centerlines.vtp')
             material = one_d.parameters.MaterialModel()
             params = one_d.parameters.Parameters()
-            params.output_directory = self.file_path + os.sep + "fluid" + os.sep + "1d"
-            params.solver_output_file = self.file_path + os.sep + "fluid" + os.sep + "1d" + os.sep + "1d_simulation_input.json"
-            params.centerlines_input_file = self.file_path + os.sep + "fluid" + os.sep + "1d" + os.sep + "centerlines.vtp"
-            params.outlet_face_names_file = self.file_path + os.sep + "fluid" + os.sep + "1d" + "outlets"
+            params.output_directory = self.file_path + os.sep
+            params.solver_output_file = self.file_path + os.sep + "1d_simulation_input.json"
+            params.centerlines_input_file = self.file_path + os.sep + "centerlines.vtp"
+            params.outlet_face_names_file = self.file_path + os.sep + "outlets"
             params.seg_size_adaptive = True
             params.model_order = 1  # Since this is strictly a 1d ROM simulation it is not an exposed parameter
             params.uniform_bc = False
-            params.inflow_input_file = self.file_path + os.sep + "fluid" + os.sep + "1d" + "inflow_1d.flow"
+            params.inflow_input_file = self.file_path + os.sep + "inflow_1d.flow"
             params.outflow_bc_type = ["rcrt.dat"]
-            params.outflow_bc_file = self.file_path + os.sep + "fluid" + os.sep + "1d"
-            params.model_name = "1d_model_{}-{}".format(network_id, tree_id)
+            params.outflow_bc_file = self.file_path + os.sep 
+            params.model_name = "1d_model_{}-{}".format(network_id, tree_id) # raksha : adjust here to match old format
             params.compute_mesh = True
             params.time_step = time_step_size
             params.num_time_steps = number_time_steps
             params.olufsen_material_exponent = olufsen_material_exponent
             params.material_model = material.OLUFSEN
-            params.viscosity = viscosity
-            params.density = density
+            # params.viscosity = viscosity Raksha - using defaults
+            # params.density = density
             mesh = one_d.mesh.Mesh()
             self.fluid_1d_simulations[0] = tuple([centerlines, mesh, params])
+            centerline_data = one_d.generate_1d_mesh.read_centerlines(params)
+            mesh.generate(params,centerline_data)
+            return self.synthetic_object.data
+            
         else:
             raise ValueError("Index out of range.")
 

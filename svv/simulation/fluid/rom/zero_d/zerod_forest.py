@@ -323,3 +323,4 @@ def export_0d_simulation(forest, network_id, inlets, steady=True, outdir=None, f
     geoms[:, 7] = vessels['radii']
 
     np.savetxt(outdir + os.sep + "geom.csv", geoms, delimiter=",")
+    return networks

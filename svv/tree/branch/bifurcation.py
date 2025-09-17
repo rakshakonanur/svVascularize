@@ -28,6 +28,20 @@ ne.set_num_threads(16)
 #[TODO] check why it is difficult to obtain points for adding vessels
 
 #@profile
+
+import numpy as np
+
+def is_point_too_close(tree, candidate_point, min_dist=1e-3):
+    """
+    Return True if candidate_point is within min_dist of any existing vessel nodes.
+    """
+    # Use the endpoints of each vessel
+    endpoints = np.vstack([tree.data[:tree.segment_count, 0:3],  # proximal points
+                           tree.data[:tree.segment_count, 3:6]]) # distal points
+    # Compute distances
+    dists = np.linalg.norm(endpoints - candidate_point, axis=1)
+    return np.any(dists < min_dist)
+
 def add_vessel(tree, **kwargs):
     """
     Create a potential vessel for the current tree configuration.
@@ -153,6 +167,8 @@ def add_vessel(tree, **kwargs):
                                 #print('flow_ratio')
                                 continue
                         bifurcation_vessel = closest_vessels[j, i]
+                        # if len(tree.vessel_map[bifurcation_vessel]['downstream']) >= 2: ### RAKKKKSSSHHHHAAA
+                        #     break
                         terminal_point = terminal_points[i, :]
                         dist = close_exact_point(data[bifurcation_vessel, :].reshape(1,data.shape[1]),
                                           terminal_point)
@@ -160,6 +176,7 @@ def add_vessel(tree, **kwargs):
                             #print('too close')
                             continue
                         cost, triad, vol = construct_optimizer(tree, terminal_points[i, :], closest_vessels[j, i])
+
                         bifurcation_cell = mesh_cells[i]
                         if callback:
                             history = []
@@ -213,6 +230,8 @@ def add_vessel(tree, **kwargs):
                                 #print('SOLUTION: {}'.format(result.x))
                                 #print('SOLUTION FUN: {}'.format(result.fun))
                                 bifurcation_point = triad(result.x)
+                                if is_point_too_close(tree, bifurcation_point):
+                                    continue  # skip this candidate
                                 tree.new_tree_scale = vol(result.x)
                                 if not result.success:
                                     #print(result.message)
@@ -1811,6 +1830,34 @@ def map_clamped(tree, point, vessel):
 import warnings
 #warnings.filterwarnings('error', category=RuntimeWarning)
 
+def is_bifurcation_allowed(tree, vessel_id, max_children=2):
+    """
+    Check if a new vessel can be attached to this vessel without
+    creating a trifurcation or higher-order branching.
+
+    Parameters
+    ----------
+    tree : object
+        The vascular tree object that holds `vessel_map`.
+    vessel_id : int
+        Index of the candidate vessel where we want to branch.
+    max_children : int, default=2
+        Maximum number of allowed children per bifurcation (2 = strict bifurcation only).
+
+    Returns
+    -------
+    bool
+        True if branching is allowed (<= max_children children),
+        False otherwise.
+    """
+    if vessel_id not in tree.vessel_map:
+        # No downstream vessels yet, safe to branch
+        return True
+    
+    num_children = len(tree.vessel_map[vessel_id]['downstream'])
+    return num_children < max_children
+
+
 def construct_optimizer(tree, point, vessel, **kwargs):
     """
      Construct the optimizer for the current tree configuration.
@@ -1900,6 +1947,7 @@ def construct_optimizer(tree, point, vessel, **kwargs):
         # points
         #triad_penalty = (numpy.max([0.0, -1.0 * numpy.min(dists - d_min)])/d_min)/(numpy.min(dists)/d_min)
         #connectivity = numpy.nan_to_num(tree.data[:, 15:18], nan=-1.0).astype(int)
+
         results = func(x, data, terminal, connectivity,
                        vessel, murray_exponent, kinematic_viscosity,
                        terminal_flow, terminal_pressure, root_pressure,

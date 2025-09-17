@@ -19,7 +19,7 @@ from collections import ChainMap
 
 
 class Tree(object):
-    def __init__(self):
+    def __init__(self, **kwargs):
         """
         The Tree class defines a branching tree structure
         that is used to abstract the physical representation
@@ -29,7 +29,7 @@ class Tree(object):
         self.parameters = TreeParameters()
         self.vessel_map = TreeMap()
         #self.c_vessel_map = None
-        self.physical_clearance = 0.0
+        self.physical_clearance = kwargs.pop('physical_clearance', 0.0) # raksha
         self.domain = None
         self.convex = None
         self.random_seed = None
@@ -291,7 +291,7 @@ class Tree(object):
 
 
     def export_centerlines(self, outdir=None, **kwargs):
-        centerlines, polys = build_centerlines(self)
+        centerlines, polys = build_centerlines(self, outdir)
         return centerlines, polys
 
 
@@ -300,4 +300,3 @@ class Tree(object):
 
     def export_centerline(self):
         pass
-

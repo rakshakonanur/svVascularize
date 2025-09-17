@@ -2,6 +2,8 @@ import numpy as np
 import os
 import json
 import platform
+from .post import make_results, view_plots
+from .process import run_0d_script
 
 def export_0d_simulation(tree ,steady=True ,outdir=None ,folder="0d_tmp" ,number_cardiac_cycles=1,flow=None,
                          number_time_pts_per_cycle=5 ,density=1.06 ,viscosity=0.04 ,material="olufsen",
@@ -202,7 +204,7 @@ def export_0d_simulation(tree ,steady=True ,outdir=None ,folder="0d_tmp" ,number
             bc['bc_name'] = "OUT" + str(vessel)
             bc['bc_type'] = "RESISTANCE"
             bc_values = {}
-            bc_values["Pd"] = 0  # tree.parameters["Pterm"]
+            bc_values["Pd"] = tree.parameters.terminal_pressure - 1333.22 * distal_pressure # 0 Raksha
             bc_values["R"] = float(total_resistance * (total_outlet_area / (np.pi * tree.data[vessel, 21] ** 2)))
             bc['bc_values'] = bc_values
             input_file['boundary_conditions'].append(bc)
@@ -220,13 +222,13 @@ def export_0d_simulation(tree ,steady=True ,outdir=None ,folder="0d_tmp" ,number
         file.write(obj)
     file.close()
 
-    #with open(outdir + os.sep + "plot_0d_results_to_3d.py", "w") as file:
-    #    file.write(make_results)
-    #file.close()
+    with open(outdir + os.sep + "plot_0d_results_to_3d.py", "w") as file:
+       file.write(make_results)
+    file.close()
 
-    #with open(outdir + os.sep + "plot_0d_results_at_slices.py", "w") as file:
-    #    file.write(view_plots)
-    #file.close()
+    with open(outdir + os.sep + "plot_0d_results_at_slices.py", "w") as file:
+       file.write(view_plots)
+    file.close()
 
     with open(outdir + os.sep + "run.py", "w") as file:
         if platform.system() == "Windows":
@@ -245,7 +247,7 @@ def export_0d_simulation(tree ,steady=True ,outdir=None ,folder="0d_tmp" ,number
                 print("WARNING: Solver location will have to be given manually")
                 print("Current solver path is: {}".format(solver_path))
             solver_file = outdir + os.sep + "solver_0d.in"
-        #file.write(run_0d_script.format(solver_path, solver_file))
+        file.write(run_0d_script.format(solver_path, solver_file))
     file.close()
 
     geom = np.zeros((tree.data.shape[0], 8))

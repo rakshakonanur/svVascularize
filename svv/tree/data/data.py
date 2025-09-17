@@ -12,22 +12,35 @@ class TreeMap(dict):
 
 
 class TreeParameters(object):
-    def __init__(self):
+    
+    def __init__(self,
+                 kinematic_viscosity=3.6e-2,
+                 fluid_density=1.06,
+                 murray_exponent=3.0,
+                 radius_exponent=2.0,
+                 length_exponent=1.0,
+                 terminal_pressure=60.0*1333.22,
+                 root_pressure=100.0*1333.22,
+                 terminal_flow=0.125/2000,
+                 root_flow=None,
+                 max_nonconvex_count=100):
+        
         """
         The TreeParameters class defines the parameters
         that are used to generate a synthetic vascular
         tree.
         """
-        self.kinematic_viscosity = 3.6e-2
-        self.fluid_density = 1.06
-        self.murray_exponent = 3.0
-        self.radius_exponent = 2.0
-        self.length_exponent = 1.0
-        self.terminal_pressure = 60.0 * 1333.22
-        self.root_pressure = 100.0 * 1333.22
-        self.terminal_flow = 0.125/2000
-        self.root_flow = None
-        self.max_nonconvex_count = 100
+
+        self.kinematic_viscosity = kinematic_viscosity
+        self.fluid_density = fluid_density
+        self.murray_exponent = murray_exponent
+        self.radius_exponent = radius_exponent
+        self.length_exponent = length_exponent
+        self.terminal_pressure = terminal_pressure
+        self.root_pressure = root_pressure
+        self.terminal_flow = terminal_flow
+        self.root_flow = root_flow
+        self.max_nonconvex_count = max_nonconvex_count
 
     def __str__(self):
         output = "Tree Parameters:\n"
