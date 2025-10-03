@@ -243,6 +243,7 @@ def write_solver_segments(mesh, ofile, params):
     dx = params.element_size
     min_num_elems = params.min_num_elems
     inflow_data = mesh.inflow_data
+    root_pressure = params.root_pressure
 
     mesh.logger.info("Uniform BC: %s" % uniform_bc)
     for t in set(mesh.bc_type.values()):
@@ -325,13 +326,16 @@ def write_solver_segments(mesh, ofile, params):
 
     ofile.writeln("")
     ofile.writeln("")
-    ofile.writeln("DATATABLE INFLOW LIST")
+    ofile.writeln("DATATABLE PRES_IN LIST")
 
-    if not inflow_data:
-        ofile.writeln("Copy and paste inflow data here.")
-    else:
-        for value in inflow_data:
-            ofile.writeln(" %f %f" % (value.time, value.flow))
+    # if not inflow_data:
+    #     ofile.writeln("Copy and paste inflow data here.")
+    # else:
+    #     for value in inflow_data:
+    #         ofile.writeln(" %f %f" % (value.time, value.flow))
+
+    for value in inflow_data:
+          ofile.writeln(" %f %f" % (value.time, root_pressure))
 
     ofile.writeln("ENDDATATABLE")
     ofile.writeln("")
@@ -350,7 +354,7 @@ def write_solver_options(mesh, ofile, params):
     save_data_freq = params.save_data_freq
 
     ofile.writeln("SOLVEROPTIONS " + str(time_step) + " " + str(save_data_freq) + " " + str(
-        num_time_steps) + " 2 INFLOW FLOW 1.0e-5 1 1")
+        num_time_steps) + " 2 PRES_IN PRESSURE_WAVE 1.0e-5 1 1")
     ofile.writeln("")
 
 
