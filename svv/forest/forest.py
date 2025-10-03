@@ -55,7 +55,7 @@ class Forest(object):
         for i in range(self.n_networks):
             network = []
             for j in range(self.n_trees_per_network[i]):
-                tree = Tree()
+                tree = Tree(**kwargs)
                 tree.physical_clearance = self.physical_clearance
                 network.append(tree)
             networks.append(network)
