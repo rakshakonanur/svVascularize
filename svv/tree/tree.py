@@ -34,7 +34,7 @@ class Tree(object):
         self.convex = None
         self.random_seed = None
         self.characteristic_length = None
-        self.domain_clearance = None
+        self.domain_clearance = kwargs.pop('domain_clearance', None) # raksha
         self.n_terminals = 0
         self.nonconvex_count = 0
         self.clamped_root = False
