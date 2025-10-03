@@ -644,6 +644,7 @@ class Simulation(object):
             centerlines.save(self.file_path + os.sep + 'centerlines.vtp')
             material = one_d.parameters.MaterialModel()
             params = one_d.parameters.Parameters()
+            params.root_pressure = self.synthetic_object.parameters.root_pressure
             params.output_directory = self.file_path + os.sep
             params.solver_output_file = self.file_path + os.sep + "1d_simulation_input.json"
             params.centerlines_input_file = self.file_path + os.sep + "centerlines.vtp"
