@@ -70,6 +70,7 @@ class Parameters():
         self.inflow_input_file = None
         self.inlet_face_input_file = None
         self.inlet_face_seg_num = 0
+        self.root_pressure = 0.0
 
         self.uniform_bc = True
         self.outflow_bc_type = None
