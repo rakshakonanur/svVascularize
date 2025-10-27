@@ -11,7 +11,8 @@ def export_0d_simulation(tree ,steady=True ,outdir=None ,folder="0d_tmp" ,number
                                   ,'material pressure' :0.0},
                          linear={'material ehr' :1e7 ,'material pressure' :0.0} ,get_0d_solver=False,
                          path_to_0d_solver=None,viscosity_model='constant' ,vivo=True ,distal_pressure=0,
-                         capacitance=True, inductance=True, filename="solver_0d.in", geom_filename="geom.csv"):
+                         capacitance=True, inductance=True, filename="solver_0d.in", geom_filename="geom.csv",
+                         scaled=False):
     """
     This script builds the 0D input file for running 0D simulation.
 
@@ -117,7 +118,8 @@ def export_0d_simulation(tree ,steady=True ,outdir=None ,folder="0d_tmp" ,number
     simulation_parameters["number_of_cardiac_cycles"] = number_cardiac_cycles
     simulation_parameters["number_of_time_pts_per_cardiac_cycle"] = number_time_pts_per_cycle
     input_file['simulation_parameters'] = simulation_parameters
-    terminal_vessels = np.argwhere(tree.data[: ,16 ]==-1).flatten()
+    terminal_vessels = np.isnan(tree.data[: ,16 ]).flatten()
+    q = np.zeros(terminal_vessels.shape[0])
     total_outlet_area = np.sum(np.pi *tree.data[terminal_vessels ,21 ]**2)
     total_resistance  = (tree.parameters.terminal_pressure - 1333 * distal_pressure ) /tree.data[0 ,22]
     for vessel in range(tree.data.shape[0]):
@@ -175,10 +177,13 @@ def export_0d_simulation(tree ,steady=True ,outdir=None ,folder="0d_tmp" ,number
                 else:
                     bc_values["Q"] = [flow, flow]
                     bc_values["t"] = [0, 1]
+
                 with open(outdir + os.sep + "inflow.flow", "w") as file:
                     for i in range(len(bc_values["t"])):
                         file.write("{}  {}\n".format(bc_values["t"][i], bc_values["Q"][i]))
                 file.close()
+            
+            
             #else:
             #    time, flow = wave(tree.data[vessel, 22], tree.data[vessel, 21] * 2)  # changed wave function
             #    bc_values["Q"] = flow.tolist()
@@ -199,16 +204,29 @@ def export_0d_simulation(tree ,steady=True ,outdir=None ,folder="0d_tmp" ,number
                 junction['junction_type'] = "NORMAL_JUNCTION"
                 junction['outlet_vessels'] = [int(tree.data[vessel, 15]), int(tree.data[vessel, 16])]
                 input_file['junctions'].append(junction)
+
         elif np.isnan(tree.data[vessel, 15]) and np.isnan(tree.data[vessel, 16]):
-            bc = {}
-            bc['bc_name'] = "OUT" + str(vessel)
-            bc['bc_type'] = "RESISTANCE"
-            bc_values = {}
-            bc_values["Pd"] = tree.parameters.terminal_pressure - 1333.22 * distal_pressure # 0 Raksha
-            bc_values["R"] = float(total_resistance * (total_outlet_area / (np.pi * tree.data[vessel, 21] ** 2)))
-            bc['bc_values'] = bc_values
-            input_file['boundary_conditions'].append(bc)
-            tmp['boundary_conditions'] = {'outlet': 'OUT' + str(vessel)}
+            if scaled:
+                q = float(tree.data[vessel, 21]**2.7 / np.sum(tree.data[terminal_vessels, 21]**2.7)) * float(tree.data[0, 22])
+                bc = {}
+                bc['bc_name'] = "OUT" + str(vessel)
+                bc['bc_type'] = "FLOW"
+                bc_values = {}
+                bc_values["Q"] = [q, q]
+                bc_values["t"] = [0, 1]
+                bc['bc_values'] = bc_values
+                input_file['boundary_conditions'].append(bc)
+                tmp['boundary_conditions'] = {'outlet': 'OUT' + str(vessel)}
+            else:
+                bc = {}
+                bc['bc_name'] = "OUT" + str(vessel)
+                bc['bc_type'] = "RESISTANCE"
+                bc_values = {}
+                bc_values["Pd"] = tree.parameters.terminal_pressure - 1333.22 * distal_pressure # 0 Raksha
+                bc_values["R"] = float(total_resistance * (total_outlet_area / (np.pi * tree.data[vessel, 21] ** 2)))
+                bc['bc_values'] = bc_values
+                input_file['boundary_conditions'].append(bc)
+                tmp['boundary_conditions'] = {'outlet': 'OUT' + str(vessel)}
         else:
             junction = {}
             junction['inlet_vessels'] = [vessel]
@@ -256,3 +274,5 @@ def export_0d_simulation(tree ,steady=True ,outdir=None ,folder="0d_tmp" ,number
     geom[:, 6] = tree.data[:, 20]
     geom[:, 7] = tree.data[:, 21]
     np.savetxt(outdir + os.sep + geom_filename, geom, delimiter=",")
+
+    return q
