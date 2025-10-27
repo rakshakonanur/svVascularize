@@ -35,6 +35,86 @@ def read_csv_into_nested_dict(file_path):
             data['pressure_out'][branch][segment][time_index] = pressure_out
     return data
 
+def _orthonormal_basis_from_direction(direction: np.ndarray):
+    d = np.asarray(direction, dtype=float)
+    d /= np.linalg.norm(d)
+    # choose an arbitrary vector not parallel to d
+    a = np.array([0.0, 0.0, 1.0])
+    if abs(np.dot(a, d)) > 0.999:
+        a = np.array([1.0, 0.0, 0.0])
+    u = np.cross(d, a); u /= np.linalg.norm(u)
+    v = np.cross(d, u); v /= np.linalg.norm(v)
+    return d, u, v
+
+def cylinder_polydata_unstructured(start, end, radius, n_theta=24, n_z=10, cap_ends=True):
+    if pv is None:
+        raise ImportError("pyvista is required at runtime. Please install pyvista to use this function.")
+
+    start = np.asarray(start, dtype=float)
+    end   = np.asarray(end, dtype=float)
+    d, u, v = _orthonormal_basis_from_direction(end - start)
+    length = np.linalg.norm(end - start)
+
+    # Rings of points
+    rings = []
+    for iz in range(n_z + 1):
+        zf = iz / n_z
+        center = start + d * (zf * length)
+        theta = np.linspace(0.0, 2*np.pi, n_theta, endpoint=False)
+        ring = center[None,:] + radius * (np.cos(theta)[:,None]*u[None,:] + np.sin(theta)[:,None]*v[None,:])
+        rings.append(ring)
+    pts = np.vstack(rings)  # ((n_z+1)*n_theta, 3)
+
+    # Side faces as quads
+    faces = []
+    for iz in range(n_z):
+        base0 = iz * n_theta
+        base1 = (iz + 1) * n_theta
+        for it in range(n_theta):
+            itn = (it + 1) % n_theta
+            i0 = base0 + it
+            i1 = base0 + itn
+            i2 = base1 + itn
+            i3 = base1 + it
+            faces += [4, i0, i1, i2, i3]
+
+    pd = pv.PolyData(pts)
+    pd.faces = np.asarray(faces, dtype=np.int64)
+
+    if cap_ends:
+        # Add triangular fans for caps
+        # Create centers
+        c0 = start
+        c1 = end
+        # indices of rings
+        ring0 = np.arange(0, n_theta, dtype=np.int64)
+        ring1 = np.arange(n_z*n_theta, (n_z+1)*n_theta, dtype=np.int64)
+
+        # Append centers to points
+        c0_id = pts.shape[0]
+        c1_id = pts.shape[0] + 1
+        pd.points = np.vstack([pd.points, c0[None,:], c1[None,:]])
+
+        # Build caps
+        cap_faces = []
+        for it in range(n_theta):
+            itn = (it + 1) % n_theta
+            # start cap (reverse to get outward normal)
+            cap_faces += [3, c0_id, ring0[itn], ring0[it]]
+            # end cap
+            cap_faces += [3, c1_id, ring1[it], ring1[itn]]
+        pd.faces = np.concatenate([pd.faces, np.asarray(cap_faces, dtype=np.int64)])
+
+    return pd
+
+def elevation(_in, _out, start, end):
+    if _out < _in:
+        lp, hp = end, start
+        rng = (_out, _in)
+    else:
+        lp, hp = start, end
+        rng = (_in, _out)
+    return lp, hp, rng
 
 geom_data = np.genfromtxt("geom.csv",delimiter=",")
 data = read_csv_into_nested_dict("output.csv")
@@ -63,18 +143,31 @@ for idx in tqdm(range(len(data['time'][0][0])),desc="Building Timeseries ",posit
         vdx = vessel
         for kdx in range(number_segments):
             center = (1/2)*direction*length + start
-            vessel = pv.Cylinder(center=center,direction=direction,height=length,radius=radius)
-            vessel = vessel.elevation(low_point=end,high_point=start,scalar_range=[data['pressure_out'][vdx][kdx][idx]/1333.33, data['pressure_in'][vdx][kdx][idx]/1333.33])
-            if data['pressure_in'][vdx][kdx][idx]/1333.33 > max_pressure:
-                max_pressure = data['pressure_in'][vdx][kdx][idx]/1333.33
-            if data['pressure_out'][vdx][kdx][idx]/1333.33 < min_pressure:
-                min_pressure = data['pressure_out'][vdx][kdx][idx]/1333.33
-            vessel.rename_array('Elevation','Pressure [mmHg]',preference='point')
-            vessel.cell_data['Flow [mL/s]'] = data['flow_in'][vdx][kdx][idx]
+            vessel = cylinder_polydata_unstructured(start=start, end=end, radius=radius, n_theta=20, n_z=100, cap_ends=False)
+            p_out = float(data['pressure_out'][vdx][kdx][idx]) / 1333.22
+            p_in  = float(data['pressure_in'][vdx][kdx][idx])  / 1333.22
+            lp, hp, rng = elevation(p_in, p_out, start, end)
+            vessel = vessel.elevation(
+                low_point=lp,
+                high_point=hp,
+                scalar_range=rng
+            )
+            if data['pressure_in'][vdx][kdx][idx]/1333.22 > max_pressure:
+                max_pressure = data['pressure_in'][vdx][kdx][idx]/1333.22
+            if data['pressure_out'][vdx][kdx][idx]/1333.22 < min_pressure:
+                min_pressure = data['pressure_out'][vdx][kdx][idx]/1333.22
+            vessel.rename_array('Elevation','Pressure_mmHg',preference='point')
+            lp, hp, rng = elevation(data['flow_in'][vdx][kdx][idx], data['flow_out'][vdx][kdx][idx], start, end)
+            vessel = vessel.elevation(low_point=lp,high_point=hp,scalar_range=rng)
+            vessel.rename_array('Elevation','Flowrate',preference='point')
+            area = np.pi*radius**2
+            lp, hp, rng = elevation(area, area, start, end)
+            vessel = vessel.elevation(low_point=lp,high_point=hp,scalar_range=rng)
+            vessel.rename_array('Elevation','Area',preference='point')
             re = (1.06*2*radius*((data['flow_in'][vdx][kdx][idx]/(np.pi*radius**2))/2))/0.04
             fd = 64/re
             wss = ((data['flow_in'][vdx][kdx][idx]/(np.pi*radius**2))/2)*fd*1.06
-            vessel.cell_data['WSS [dyne/cm^2]']  = wss
+            vessel.cell_data['WSS']  = wss
             if max_flow < data['flow_in'][vdx][kdx][idx]:
                 max_flow = data['flow_in'][vdx][kdx][idx]
             if min_flow > data['flow_in'][vdx][kdx][idx]:
@@ -107,18 +200,17 @@ if not os.path.isdir("timeseries_for_wss_gif"):
 total = timepoints[0].merge(timepoints[1:])
 for i in tqdm(range(len(timepoints)),desc="Saving Timeseries",position=1):
     p = pv.Plotter(off_screen=True)
-    p.add_mesh(timepoints[i],scalars='Pressure [mmHg]',clim=[round(min_pressure,4),round(max_pressure,4)],cmap="coolwarm")
+    p.add_mesh(timepoints[i],scalars='Pressure_mmHg',clim=[round(min_pressure,4),round(max_pressure,4)],cmap="coolwarm")
     p.show(auto_close=True,screenshot=os.getcwd()+os.sep+"timeseries_for_pressure_gif"+os.sep+"time_point_{}.png".format(i))
     p = pv.Plotter(off_screen=True)
-    p.add_mesh(timepoints[i],scalars='Flow [mL/s]',clim=[round(min_flow,4),round(max_flow,4)],cmap="GnBu")
+    p.add_mesh(timepoints[i],scalars='Flowrate',clim=[round(min_flow,4),round(max_flow,4)],cmap="GnBu")
     p.show(auto_close=True,screenshot=os.getcwd()+os.sep+"timeseries_for_flow_gif"+os.sep+"time_point_{}.png".format(i))
     p = pv.Plotter(off_screen=True)
-    p.add_mesh(timepoints[i],scalars='WSS [dyne/cm^2]',clim=[round(min_wss,2),round(max_wss,2)],cmap="coolwarm")
+    p.add_mesh(timepoints[i],scalars='WSS',clim=[round(min_wss,2),round(max_wss,2)],cmap="coolwarm")
     p.show(auto_close=True,screenshot=os.getcwd()+os.sep+"timeseries_for_wss_gif"+os.sep+"time_point_{}.png".format(i))
     timepoints[i].save(os.getcwd()+os.sep+"timeseries"+os.sep+"time_point_{}.vtp".format(i))
 
 total.save(os.getcwd()+os.sep+"timeseries"+os.sep+"total.vtp")
-
 """
 
 view_plots="""import numpy as np
