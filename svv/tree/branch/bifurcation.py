@@ -1051,7 +1051,7 @@ def add_vessel(tree, **kwargs):
                         terminal_point = terminal_points[i, :]
                         dist = close_exact_point(data[bifurcation_vessel, :].reshape(1,data.shape[1]),
                                           terminal_point)
-                        if dist < data[bifurcation_vessel, 21]*4:
+                        if dist < data[bifurcation_vessel, 21]*4: 
                             print('too close')
                             continue
                         line = numpy.linspace(0, 1, nonconvex_sampling).reshape(-1, 1)

@@ -1,19 +1,16 @@
 # Remeshing utility based on MMG executables
 
 import os
-import stat
-import platform
 import subprocess
 import pyvista as pv
 import pymeshfix
 import meshio
 import numpy
+import numpy as np
 from copy import deepcopy
-import svv
+from typing import Sequence, Optional
 
-filepath = os.path.abspath(__file__)
-dirpath = os.path.dirname(filepath)
-modulepath = os.path.join(os.path.dirname(os.path.abspath(svv.__file__)), "bin")
+from .mmg import run_mmg
 
 def remesh_surface_2d(boundary, autofix=False, ar=None, hausd=None, hgrad=None, verbosity=1,
                    hmax=None, hmin=None, hsiz=None, noinsert=None, nomove=None, nosurf=True,
@@ -232,67 +229,41 @@ def remesh_surface_2d(boundary, autofix=False, ar=None, hausd=None, hgrad=None, 
         mesh = meshio.Mesh(points, lines)
         meshio.write("tmp.mesh", mesh)
         boundary = [boundary]
-    if platform.system() == 'Windows':
-        if os.path.exists(modulepath + os.sep + "mmg2d_O3.exe"):
-            _EXE_ = modulepath + os.sep + "mmg2d_O3.exe"
-        else:
-            _EXE_ = dirpath+os.sep+"Windows"+os.sep+"mmg2d_O3.exe"
-    elif platform.system() == "Linux":
-        if os.path.exists(modulepath + os.sep + "mmg2d_O3"):
-            _EXE_ = modulepath + os.sep + "mmg2d_O3"
-        else:
-            _EXE_ = dirpath+os.sep+"Linux"+os.sep+"mmg2d_O3"
-    elif platform.system() == "Darwin":
-        if os.path.exists(modulepath + os.sep + "mmg2d_O3"):
-            _EXE_ = modulepath + os.sep + "mmg2d_O3"
-        else:
-            _EXE_ = dirpath+os.sep+"Mac"+os.sep+"mmg2d_O3"
-    else:
-        raise NotImplementedError("Operating system not supported.")
-    devnull = open(os.devnull, 'w')
-    executable_list = [_EXE_, "tmp.mesh"]
+    args = ["tmp.mesh"]
     if ar is not None:
-        executable_list.extend(["-ar", str(ar)])
+        args.extend(["-ar", str(ar)])
     if hausd is not None:
-        executable_list.extend(["-hausd", str(hausd)])
+        args.extend(["-hausd", str(hausd)])
     if hgrad is not None:
-        executable_list.extend(["-hgrad", str(hgrad)])
+        args.extend(["-hgrad", str(hgrad)])
     if verbosity is not None:
-        executable_list.extend(["-v", str(verbosity)])
+        args.extend(["-v", str(verbosity)])
     if hmax is not None:
-        executable_list.extend(["-hmax", str(hmax)])
+        args.extend(["-hmax", str(hmax)])
     if hmin is not None:
-        executable_list.extend(["-hmin", str(hmin)])
+        args.extend(["-hmin", str(hmin)])
     if hsiz is not None:
-        executable_list.extend(["-hsiz", str(hsiz)])
+        args.extend(["-hsiz", str(hsiz)])
     if noinsert is not None:
-        executable_list.extend(["-noinsert"])
+        args.extend(["-noinsert"])
     if nomove is not None:
-        executable_list.extend(["-nomove"])
+        args.extend(["-nomove"])
     if nosurf is not None:
-        executable_list.extend(["-nosurf"])
+        args.extend(["-nosurf"])
     if noswap is not None:
-        executable_list.extend(["-noswap"])
+        args.extend(["-noswap"])
     if nr is not None:
-        executable_list.extend(["-nr"])
+        args.extend(["-nr"])
     if optim is not None:
-        executable_list.extend(["-optim", str(optim)])
+        args.extend(["-optim", str(optim)])
     if rn is not None:
-        executable_list.extend(["-rn", str(rn)])
+        args.extend(["-rn", str(rn)])
     if nsd is not None:
-        executable_list.extend(["-nsd", str(nsd)])
+        args.extend(["-nsd", str(nsd)])
     if verbosity == 0:
-        try:
-            subprocess.check_call(executable_list, stdout=devnull, stderr=devnull)
-        except:
-            os.chmod(_EXE_, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-            subprocess.check_call(executable_list, stdout=devnull, stderr=devnull)
+        run_mmg("mmg2d", args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
-        try:
-            subprocess.check_call(executable_list)
-        except:
-            os.chmod(_EXE_, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-            subprocess.check_call(executable_list)
+        run_mmg("mmg2d", args)
     clean_medit("tmp.o.mesh")
     remesh_data = meshio.read("tmp.o.mesh")
     vertices = remesh_data.points
@@ -438,65 +409,50 @@ def remesh_surface(pv_polydata_object, autofix=True, ar=None, hausd=None, hgrad=
     pv.save_meshio("tmp.mesh", _mesh_)
     if not isinstance(required_triangles, type(None)):
         add_required("tmp.mesh", required_triangles)
-    if platform.system() == 'Windows':
-        if os.path.exists(modulepath + os.sep + "mmgs_O3.exe"):
-            _EXE_ = modulepath + os.sep + "mmgs_O3.exe"
-        else:
-            _EXE_ = dirpath+os.sep+"Windows"+os.sep+"mmgs_O3.exe"
-    elif platform.system() == "Linux":
-        if os.path.exists(modulepath + os.sep + "mmgs_O3"):
-            _EXE_ = modulepath + os.sep + "mmgs_O3"
-        else:
-            _EXE_ = dirpath+os.sep+"Linux"+os.sep+"mmgs_O3"
-    elif platform.system() == "Darwin":
-        if os.path.exists(modulepath + os.sep + "mmgs_O3"):
-            _EXE_ = modulepath + os.sep + "mmgs_O3"
-        else:
-            _EXE_ = dirpath+os.sep+"Mac"+os.sep+"mmgs_O3"
-    else:
-        raise NotImplementedError("Operating system not supported.")
-    devnull = open(os.devnull, 'w')
-    executable_list = [_EXE_, "tmp.mesh"]
+
+    args = ["tmp.mesh"]
+    # If caller prepared a sizing function file in the working directory,
+    # detect and pass it through to MMG.
+    sol_path = None
+    try:
+        if os.path.exists("in.sol"):
+            sol_path = "in.sol"
+    except Exception:
+        sol_path = None
+    if sol_path:
+        args.extend(["-sol", sol_path])
     if ar is not None:
-        executable_list.extend(["-ar", str(ar)])
+        args.extend(["-ar", str(ar)])
     if hausd is not None:
-        executable_list.extend(["-hausd", str(hausd)])
+        args.extend(["-hausd", str(hausd)])
     if hgrad is not None:
-        executable_list.extend(["-hgrad", str(hgrad)])
+        args.extend(["-hgrad", str(hgrad)])
     if verbosity is not None:
-        executable_list.extend(["-v", str(verbosity)])
+        args.extend(["-v", str(verbosity)])
     if hmax is not None:
-        executable_list.extend(["-hmax", str(hmax)])
+        args.extend(["-hmax", str(hmax)])
     if hmin is not None:
-        executable_list.extend(["-hmin", str(hmin)])
+        args.extend(["-hmin", str(hmin)])
     if hsiz is not None:
-        executable_list.extend(["-hsiz", str(hsiz)])
+        args.extend(["-hsiz", str(hsiz)])
     if noinsert is not None:
-        executable_list.extend(["-noinsert"])
+        args.extend(["-noinsert"])
     if nomove is not None:
-        executable_list.extend(["-nomove"])
+        args.extend(["-nomove"])
     if nosurf is not None:
-        executable_list.extend(["-nosurf"])
+        args.extend(["-nosurf"])
     if noswap is not None:
-        executable_list.extend(["-noswap"])
+        args.extend(["-noswap"])
     if nr is not None:
-        executable_list.extend(["-nr"])
+        args.extend(["-nr"])
     if optim:
-        executable_list.extend(["-optim"])
+        args.extend(["-optim"])
     if rn is not None:
-        executable_list.extend(["-rn", str(rn)])
+        args.extend(["-rn", str(rn)])
     if verbosity == 0:
-        try:
-            subprocess.check_call(executable_list, stdout=devnull, stderr=devnull)
-        except:
-            os.chmod(_EXE_, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-            subprocess.check_call(executable_list, stdout=devnull, stderr=devnull)
+        run_mmg("mmgs", args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
-        try:
-            subprocess.check_call(executable_list)
-        except:
-            os.chmod(_EXE_, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-            subprocess.check_call(executable_list)
+        run_mmg("mmgs", args)
     clean_medit("tmp.o.mesh")
     remesh_data = meshio.read("tmp.o.mesh")
     vertices = remesh_data.points
@@ -520,6 +476,12 @@ def remesh_surface(pv_polydata_object, autofix=True, ar=None, hausd=None, hgrad=
     os.remove("tmp.mesh")
     os.remove("tmp.o.sol")
     os.remove("tmp.o.mesh")
+    # Clean up sizing file if provided
+    if sol_path and os.path.exists(sol_path):
+        try:
+            os.remove(sol_path)
+        except Exception:
+            pass
     return remeshed_surface
 
 
@@ -602,65 +564,39 @@ def remesh_volume(pv_unstructured_mesh, auto=True, ar=None, hausd=None, hgrad=No
     >>> remeshed_volume = remesh_volume(volume_mesh, hmax=0.1)
     """
     pv.save_meshio("tmp.mesh", pv_unstructured_mesh)
-    if platform.system() == 'Windows':
-        if os.path.exists(modulepath + os.sep + "mmg3d_O3.exe"):
-            _EXE_ = modulepath + os.sep + "mmg3d_O3.exe"
-        else:
-            _EXE_ = dirpath+os.sep+"Windows"+os.sep+"mmg3d_O3.exe"
-    elif platform.system() == "Linux":
-        if os.path.exists(modulepath + os.sep + "mmg3d_O3"):
-            _EXE_ = modulepath + os.sep + "mmg3d_O3"
-        else:
-            _EXE_ = dirpath+os.sep+"Linux"+os.sep+"mmg3d_O3"
-    elif platform.system() == "Darwin":
-        if os.path.exists(modulepath + os.sep + "mmg3d_O3"):
-            _EXE_ = modulepath + os.sep + "mmg3d_O3"
-        else:
-            _EXE_ = dirpath+os.sep+"Mac"+os.sep+"mmg3d_O3"
-    else:
-        raise NotImplementedError("Operating system not supported.")
-    devnull = open(os.devnull, 'w')
-    executable_list = [_EXE_, "tmp.mesh"]
+    args = ["tmp.mesh"]
     if ar is not None:
-        executable_list.extend(["-ar", str(ar)])
+        args.extend(["-ar", str(ar)])
     if hausd is not None:
-        executable_list.extend(["-hausd", str(hausd)])
+        args.extend(["-hausd", str(hausd)])
     if hgrad is not None:
-        executable_list.extend(["-hgrad", str(hgrad)])
+        args.extend(["-hgrad", str(hgrad)])
     if verbosity is not None:
-        executable_list.extend(["-v", str(verbosity)])
+        args.extend(["-v", str(verbosity)])
     if hmax is not None:
-        executable_list.extend(["-hmax", str(hmax)])
+        args.extend(["-hmax", str(hmax)])
     if hmin is not None:
-        executable_list.extend(["-hmin", str(hmin)])
+        args.extend(["-hmin", str(hmin)])
     if hsiz is not None:
-        executable_list.extend(["-hsiz", str(hsiz)])
+        args.extend(["-hsiz", str(hsiz)])
     if noinsert is not None:
-        executable_list.extend(["-noinsert"])
+        args.extend(["-noinsert"])
     if nomove is not None:
-        executable_list.extend(["-nomove"])
+        args.extend(["-nomove"])
     if nosurf is not None:
-        executable_list.extend(["-nosurf"])
+        args.extend(["-nosurf"])
     if noswap is not None:
-        executable_list.extend(["-noswap"])
+        args.extend(["-noswap"])
     if nr is not None:
-        executable_list.extend(["-nr"])
+        args.extend(["-nr"])
     if optim is not None:
-        executable_list.extend(["-optim", str(optim)])
+        args.extend(["-optim", str(optim)])
     if rn is not None:
-        executable_list.extend(["-rn", str(rn)])
+        args.extend(["-rn", str(rn)])
     if verbosity == 0:
-        try:
-            subprocess.check_call(executable_list, stdout=devnull, stderr=devnull)
-        except:
-            os.chmod(_EXE_, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-            subprocess.check_call(executable_list, stdout=devnull, stderr=devnull)
+        run_mmg("mmg3d", args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
-        try:
-            subprocess.check_call(executable_list)
-        except:
-            os.chmod(_EXE_, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-            subprocess.check_call(executable_list)
+        run_mmg("mmg3d", args)
     clean_medit("tmp.o.mesh")
     remeshed_data = meshio.read("tmp.o.mesh")
     vertices = remeshed_data.points
@@ -778,3 +714,231 @@ def clean_medit(filename):
                 new_lines.extend(lines[o:keywords_index[i+1]])
     new_file.writelines(new_lines)
     new_file.close()
+
+def write_medit_sol(mesh: pv.PolyData, path: str, array_name="MeshSizingFunction",
+                    scale=1, default_size=None):
+    npts = mesh.n_points
+    vals = None
+    if array_name in mesh.point_data:
+        vals = np.asarray(mesh.point_data[array_name], dtype=float).reshape(-1)
+        if vals.size != npts:
+            raise RuntimeError(f"Array '{array_name}' length ({vals.size}) "
+                               f"!= number of points ({npts})")
+          # Replace non-positive entries if default provided
+        if default_size is not None:
+            vals = np.where(vals > 0.0, vals, float(default_size))
+    else:
+        if default_size is None:
+            raise RuntimeError(f"Point-data array '{array_name}' not found and no default_size provided.")
+        vals = np.full(npts, float(default_size), dtype=float)
+
+    vals = scale * vals  # SV typically scales by ~0.8 before MMG
+
+    with open(path, "w") as f:
+        f.write("MeshVersionFormatted 2\n")
+        f.write("Dimension 3\n\n")
+        f.write("SolAtVertices\n")
+        f.write(f"{npts}\n")
+        f.write("1 1\n")  # one scalar per vertex
+        for v in vals:
+            f.write(f"{v:.15g}\n")
+        f.write("\nEnd\n")
+
+def sphere_refinement(
+      mesh: pv.PolyData,
+      radius: float,
+      center: Sequence[float],
+      local_edge_size: float,
+      global_edge_size: float,
+      array_name: str = "MeshSizingFunction",
+      refine_id_name: Optional[str] = None,
+      refine_id_value: int = 1,
+      inplace: bool = True,
+      ar=None,
+      hausd=None,
+      hgrad=None,
+      verbosity=1,
+      hmax=None,
+      hmin=None,
+      hsiz=None,
+      noinsert=None,
+      nomove=None,
+      nosurf=None,
+      noswap=None,
+      nr=None,
+      optim=False,
+      rn=None,
+      required_triangles=None
+  ) -> pv.PolyData:
+    """
+    Set local mesh edge size for points inside a sphere.
+
+    Args:
+
+    mesh: pyvista.PolyData surface mesh (triangulated or not).
+
+    radius: Sphere radius (> 0).
+
+    center: Sphere center [cx, cy, cz].
+
+    local_edge_size: Target edge size to assign inside the sphere (> 0).
+
+    array_name: Point-data array name to write (default: 'MeshSizingFunction').
+
+    global_edge_size: If provided and the array is missing, initialize all points
+          to this value. If not provided and the array is missing, initialize with zeros.
+          Points outside the sphere are left unchanged.
+
+    refine_id_name: Optional point-data int array to tag refined points
+          (e.g., 'RefineID'). If provided, sets tag = refine_id_value inside the sphere,
+          leaves others as-is (initializes to 0 if array missing).
+
+    refine_id_value: Tag value to set in refine_id_name for points in the sphere.
+
+    inplace: If False, process a deep copy and return it.
+
+    ar : float, optional
+        Anisotropy ratio. See MMG3D documentation for details.
+
+    hausd : float, optional
+        Control on Hausdorff distance. See MMG3D documentation.
+
+    hgrad : float, optional
+        Gradation parameter. See MMG3D documentation.
+
+    verbosity : int, optional
+        Verbosity level for MMG output. Default is 1.
+
+    hmax : float, optional
+        Maximum edge size. See MMG3D documentation.
+
+    hmin : float, optional
+        Minimum edge size. See MMG3D documentation.
+
+    hsiz : float, optional
+        Size parameter for remeshing. See MMG3D documentation.
+
+    noinsert : bool, optional
+        If True, prohibits node insertion. See MMG3D documentation.
+
+    nomove : bool, optional
+        If True, prohibits node movement. See MMG3D documentation.
+
+    nosurf : bool, optional
+        If True, prohibits surface modifications. See MMG3D documentation.
+
+    noswap : bool, optional
+        If True, prohibits edge swapping. See MMG3D documentation.
+
+    nr : bool, optional
+        Disables reorientation of the mesh. See MMG3D documentation.
+
+    optim : bool, optional
+        Optimization parameter. See MMG3D documentation.
+
+    rn : bool, optional
+        Removes nonmanifold elements. See MMG3D documentation.
+      Returns:
+        pv.PolyData: The updated mesh (same object if inplace=True).
+    """
+    if not isinstance(mesh, pv.PolyData):
+        raise TypeError("mesh must be a pyvista.PolyData")
+    if radius <= 0:
+        raise ValueError("radius must be > 0")
+    if local_edge_size <= 0:
+        raise ValueError("local_edge_size must be > 0")
+    if global_edge_size <= 0:
+        raise ValueError("global_edge_size must be > 0")
+
+    out = mesh if inplace else mesh.copy(deep=True)
+
+    pts = out.points.astype(float)
+    ctr = np.asarray(center, dtype=float).reshape(3)
+    if ctr.shape != (3,):
+        raise ValueError("center must be a sequence of three floats")
+
+    # Compute mask of points inside the sphere (vectorized).
+    d2 = np.einsum("ij,ij->i", pts - ctr, pts - ctr)  # squared distance
+    mask = d2 <= float(radius) ** 2
+
+    # Prepare or fetch the sizing array.
+    n = pts.shape[0]
+    if array_name in out.point_data:
+        sizes = np.asarray(out.point_data[array_name], dtype=float).copy()
+        if sizes.shape[0] != n:
+            raise RuntimeError(f"Existing array '{array_name}' length {sizes.shape[0]} != n_points {n}")
+    else:
+        if global_edge_size is None:
+            sizes = np.zeros(n, dtype=float)
+        else:
+            sizes = np.full(n, float(global_edge_size), dtype=float)
+
+    # Apply refinement.
+    sizes[mask] = float(local_edge_size)
+    out.point_data[array_name] = sizes
+
+    # Optional: tag refined points (like SimVascular's RefineID).
+    if refine_id_name:
+        if refine_id_name in out.point_data:
+            rid = np.asarray(out.point_data[refine_id_name], dtype=np.int32).copy()
+            if rid.shape[0] != n:
+                raise RuntimeError(f"Existing array '{refine_id_name}' length {rid.shape[0]} != n_points {n}")
+        else:
+            rid = np.zeros(n, dtype=np.int32)
+        rid[mask] = int(refine_id_value)
+        out.point_data[refine_id_name] = rid
+    write_medit_sol(out, "in.sol", array_name = "MeshSizingFunction",scale = 1, default_size = global_edge_size)
+    pv.save_meshio("tmp.mesh", out)
+    if not isinstance(required_triangles, type(None)):
+        add_required("tmp.mesh", required_triangles)
+    args = ["tmp.mesh", "-sol", "in.sol"]
+    if ar is not None:
+        args.extend(["-ar", str(ar)])
+    if hausd is not None:
+        args.extend(["-hausd", str(hausd)])
+    if hgrad is not None:
+        args.extend(["-hgrad", str(hgrad)])
+    if verbosity is not None:
+        args.extend(["-v", str(verbosity)])
+    if hmax is not None:
+        args.extend(["-hmax", str(hmax)])
+    if hmin is not None:
+        args.extend(["-hmin", str(hmin)])
+    if hsiz is not None:
+        args.extend(["-hsiz", str(hsiz)])
+    if noinsert is not None:
+        args.extend(["-noinsert"])
+    if nomove is not None:
+        args.extend(["-nomove"])
+    if nosurf is not None:
+        args.extend(["-nosurf"])
+    if noswap is not None:
+        args.extend(["-noswap"])
+    if nr is not None:
+        args.extend(["-nr"])
+    if optim:
+        args.extend(["-optim"])
+    if rn is not None:
+        args.extend(["-rn", str(rn)])
+    if verbosity == 0:
+        run_mmg("mmgs", args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        run_mmg("mmgs", args)
+    clean_medit("tmp.o.mesh")
+    remesh_data = meshio.read("tmp.o.mesh")
+    vertices = remesh_data.points
+    has_triangles = False
+    for cell_block in remesh_data.cells:
+        if cell_block.type == "triangle":
+            faces = cell_block.data
+            has_triangles = True
+            break
+    if not has_triangles:
+        raise NotImplementedError("Only triangular surfaces are supported.")
+    faces = numpy.hstack([numpy.full((faces.shape[0], 1), 3), faces])
+    remeshed_surface = pv.PolyData(vertices, faces.flatten())
+    os.remove("tmp.mesh")
+    os.remove("tmp.o.sol")
+    os.remove("tmp.o.mesh")
+    os.remove("in.sol")
+    return remeshed_surface

@@ -78,7 +78,8 @@ def cylinder_polydata_unstructured(start, end, radius, n_theta=24, n_z=10, cap_e
             i3 = base1 + it
             faces += [4, i0, i1, i2, i3]
 
-    pd = pv.PolyData(pts)
+    pd = pv.PolyData()
+    pd.points = pts
     pd.faces = np.asarray(faces, dtype=np.int64)
 
     if cap_ends:
