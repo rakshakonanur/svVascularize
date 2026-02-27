@@ -76,7 +76,7 @@ class GeneralMeshBase:
             else:
                 raise ValueError("Face file not found.")
         elif isinstance(face, pyvista.PolyData):
-            check_nodes = numpy.all(numpy.in1d(face.points.ravel(), self.mesh.points.ravel()))
+            check_nodes = numpy.all(numpy.isin(face.points.ravel(), self.mesh.points.ravel()))
             if check_nodes:
                 if not isinstance(name, type(None)):
                     self.faces[name] = face

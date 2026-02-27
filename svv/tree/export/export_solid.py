@@ -707,12 +707,13 @@ def union_tubes(tubes, lines, cap_resolution=40):
             hsize = min(hsize, (min(lines[i]['radius'])*2*numpy.pi)/cap_resolution)
             model = remesh_surface(model, hsiz=hsize)
             model = model.compute_normals(auto_orient_normals=True)
+    model.save('union.vtk')
     model.cell_data['hsize'] = 0
     model.cell_data['hsize'][0] = hsize
     return model
 
 
-def build_watertight_solid(tree, cap_resolution=40):
+def build_watertight_solid(tree, cap_resolution=10):
     """
     This function builds a solid surface mesh from a given vascular tree object.
     This mesh should be guaranteed to be watertight and define a closed manifold.

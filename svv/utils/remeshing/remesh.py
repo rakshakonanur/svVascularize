@@ -967,4 +967,8 @@ def sphere_refinement(
     os.remove("tmp.o.sol")
     os.remove("tmp.o.mesh")
     os.remove("in.sol")
+<<<<<<< HEAD
     return remeshed_surface
+=======
+    return remeshed_surface
+>>>>>>> 00965fc (adding all local updates)

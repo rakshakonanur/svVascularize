@@ -89,7 +89,8 @@ class Simulation(object):
     def build_meshes(self, fluid=True, tissue=False, hausd=0.0001, hsize=None, minratio=1.1, mindihedral=10.0,
                      order=1, remesh_vol=False, boundary_layer=True, layer_thickness_ratio=0.25,
                      layer_thickness_ratio_adjustment=0.5, boundary_layer_attempts=5, wall_layers=False,
-                     wall_thickness=None, upper_num_triangles=1000, lower_num_triangles=100):
+                     wall_thickness=None, upper_num_triangles=1000, lower_num_triangles=100,
+                     mesh_hmax=None, mesh_hmin_factor=0.3, mesh_hgrad=1.2):
         """
         Build the mesh objects for 3D simulations.
         :return:
@@ -104,6 +105,34 @@ class Simulation(object):
         self.fluid_domain_boundary_layers = []
         self.fluid_domain_interiors = []
         self.fluid_domain_wall_layers = []
+        if mesh_hmax is not None and mesh_hmax <= 0:
+            raise ValueError("mesh_hmax must be > 0 when provided.")
+        if mesh_hmin_factor <= 0:
+            raise ValueError("mesh_hmin_factor must be > 0.")
+
+        def _infer_hsize(mesh_obj):
+            try:
+                return float(mesh_obj.cell_data["hsize"][0])
+            except Exception:
+                pass
+            try:
+                return float(mesh_obj.hsize)
+            except Exception:
+                return None
+
+        def _target_hmax(local_hsize=None):
+            if mesh_hmax is not None:
+                return float(mesh_hmax)
+            if local_hsize is None:
+                return None
+            return float(local_hsize)
+
+        def _target_hmin(local_hsize=None):
+            hmax_local = _target_hmax(local_hsize)
+            if hmax_local is None:
+                return None
+            return float(mesh_hmin_factor) * hmax_local
+
         if isinstance(self.synthetic_object, svv.tree.tree.Tree):
             if fluid:
                 if tissue:
@@ -287,6 +316,7 @@ class Simulation(object):
                             fluid_surface_mesh = fluid_volume_mesh.extract_surface()
                             network_fluid_surface_meshes.append(fluid_surface_mesh)
                             network_fluid_volume_meshes.append(fluid_volume_mesh)
+                for tree in network:
                     if tissue:
                         # Extrude the root of the tree to ensure proper intersection with the tissue domain.
                         root_extension = max(tree.data[0, 21] * 4, tree.data[0, 20] * 0.5)
@@ -330,6 +360,8 @@ class Simulation(object):
                 self.fluid_domain_volume_meshes.append(network_fluid_volume_meshes)
                 self.tissue_domain_surface_meshes.append(network_tissue_surface_meshes)
                 self.tissue_domain_volume_meshes.append(network_tissue_volume_meshes)
+                tissue_volume_mesh.save(self.file_path + os.sep + "tissue_domain_volume.vtu")
+
         elif isinstance(self.synthetic_object, svv.forest.forest.Forest) and not isinstance(self.synthetic_object.connections, type(None)):
             if fluid or tissue:
                 if tissue:
@@ -432,7 +464,14 @@ class Simulation(object):
                     tissue_domain = tissue_domain.compute_normals(auto_orient_normals=True)
                     print("Remeshing tissue domain with edge size {}.".format(fluid_hsize))
                     #tissue_domain = remesh_surface(tissue_domain, hmin=fluid_hsize, hmax=hsize)
-                    tissue_domain = remesh_surface(tissue_domain, optim=True)
+                    tissue_domain = remesh_surface(
+                        tissue_domain,
+                        optim=True,
+                        hausd=hausd,
+                        hmax=_target_hmax(fluid_hsize),
+                        hmin=_target_hmin(fluid_hsize),
+                        hgrad=mesh_hgrad,
+                    )
                 self.tissue_domain_surface_meshes.append(tissue_domain)
                 #tissue_domain = remesh_surface(tissue_domain, hausd=hausd)
                 print("Tetrahedralizing tissue domain.")
@@ -454,9 +493,10 @@ class Simulation(object):
                     tissue_surface = tissue_volume_mesh.extract_surface()
                     self.tissue_domain_surface_meshes[-1] = tissue_surface
                     self.tissue_domain_volume_meshes.append(tissue_volume_mesh)
+
         else:
             raise ValueError("Unsupported synthetic object type.")
-
+        
     def extract_faces(self, crease_angle=60.0, verbose=False):
         """
         Extract the faces from the mesh objects.
