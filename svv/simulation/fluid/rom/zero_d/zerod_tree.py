@@ -11,8 +11,6 @@ from svv.simulation.fluid.rom.zero_d.post import (
 )
 from svv.simulation.fluid.rom.zero_d.process import run_0d_script
 from svv.utils.solvers.solver_0d import get_solver_0d_exe
-from .post import make_results, view_plots
-from .process import run_0d_script
 
 def export_0d_simulation(tree ,steady=True ,outdir=None ,folder="0d_tmp" ,number_cardiac_cycles=1,flow=None,
                          number_time_pts_per_cycle=5 ,density=1.06 ,viscosity=0.04 ,material="olufsen",
@@ -216,7 +214,7 @@ def export_0d_simulation(tree ,steady=True ,outdir=None ,folder="0d_tmp" ,number
             bc['bc_name'] = "OUT" + str(vessel)
             bc['bc_type'] = "RESISTANCE"
             bc_values = {}
-            bc_values["Pd"] = tree.parameters.terminal_pressure - 1333.22 * distal_pressure # 0 Raksha
+            bc_values["Pd"] = 0  # tree.parameters["Pterm"]
             bc_values["R"] = float(total_resistance * (total_outlet_area / (np.pi * tree.data[vessel, 21] ** 2)))
             bc['bc_values'] = bc_values
             input_file['boundary_conditions'].append(bc)
